@@ -1,5 +1,5 @@
 # Use the official Python base image
-FROM python:3.12-slim
+FROM python:3.10-slim
 
 # Set the working directory
 WORKDIR /app
@@ -7,9 +7,12 @@ WORKDIR /app
 # Copy the requirements file into the container
 COPY requirements.txt .
 
+RUN apt-get update;\
+    apt-get install -y gcc vim python3-libtorrent
+
 # Install the required packages
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip\
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code into the container
 COPY . .

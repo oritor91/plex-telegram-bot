@@ -1,10 +1,12 @@
-name: telegram_jellyfin_bot
+name: telegram_bot
 channels:
   - conda-forge
 dependencies:
-  - python>=3.8
+  - python=3.10
   - pip
   - pip:
     - python-telegram-bot>=13.0
     - pyrogram
     - pydantic
+    - TgCrypto
+    - libtorrent
