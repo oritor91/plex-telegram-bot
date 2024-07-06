@@ -1,0 +1,10 @@
+name: telegram_jellyfin_bot
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.8
+  - pip
+  - pip:
+    - python-telegram-bot>=13.0
+    - pyrogram
+    - pydantic
