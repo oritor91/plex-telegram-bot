@@ -9,4 +9,3 @@ dependencies:
     - pyrogram
     - pydantic
     - TgCrypto
-    - libtorrent
