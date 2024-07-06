@@ -392,7 +392,7 @@ class TelegramBot:
             f"Choosen show -> {show_name}",
             reply_markup=ReplyKeyboardRemove(),
         )
-        episodes = [self.list_episodes(self.user_data.show_name)]
+        episodes = self.list_episodes(self.user_data.show_name)
         await update.message.reply_text(
             "Please select an episode to update:",
             reply_markup=ReplyKeyboardMarkup(episodes, one_time_keyboard=True),
@@ -410,8 +410,8 @@ class TelegramBot:
             list: The list of episodes.
         """
         show_path = os.path.join(self.shows_path, show_name)
-        shows = os.listdir(show_path)
-        return shows
+        episodes = os.listdir(show_path)
+        return [episodes[i : i + MAX_SHOWS_PER_RAW] for i in range(0, len(episodes), MAX_SHOWS_PER_RAW)]
 
     async def receive_episode_to_update(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
