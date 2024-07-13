@@ -144,7 +144,7 @@ class TelegramBot:
         return CHOOSE_SHOW
 
     async def display_show_options(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, add_new_show: bool = False
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, add_new_show: bool = True
     ) -> str:
         """
         Displays the show options to the user.
@@ -210,7 +210,7 @@ class TelegramBot:
 
         self.user_data.show_name = show_name
         await update.message.reply_text(text=f"Selected option: {show_name}")
-        await self.process_media(update, context)
+        return await self.process_media(update, context)
 
     async def receive_new_show_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -225,7 +225,7 @@ class TelegramBot:
         show_name = update.message.text
         self.user_data.show_name = show_name
         await update.message.reply_text(f"New show name received: {show_name}")
-        await self.process_media(update, context)
+        return await self.process_media(update, context)
 
     async def handle_channel_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
