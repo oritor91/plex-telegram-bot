@@ -22,6 +22,7 @@ class ParsedURL(BaseModel):
 class TorrentData(BaseModel):
     torrent_link: str | None = None
 
+
 class MovieData(BaseModel):
     movie_name: str | None = None
     movie_link: str | None = None

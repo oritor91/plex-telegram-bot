@@ -19,7 +19,13 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
 )
-from telegram_media_bot.utils import MovieData, ParsedURL, TorrentData, UserData, download_torrent
+from telegram_media_bot.utils import (
+    MovieData,
+    ParsedURL,
+    TorrentData,
+    UserData,
+    download_torrent,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("telegram_media_bot")
@@ -80,7 +86,9 @@ class TelegramBot:
         self.pyro_client: Client = Client(
             "nodim", api_id=self.api_id, api_hash=self.api_hash
         )
-        self.user_data: UserData = UserData(torrent_data=TorrentData(), movie_data=MovieData())
+        self.user_data: UserData = UserData(
+            torrent_data=TorrentData(), movie_data=MovieData()
+        )
 
     async def start_pyro_client(self):
         """
@@ -144,7 +152,7 @@ class TelegramBot:
 
         await self.display_show_options(update, context, add_new_show=True)
         return CHOOSE_SHOW
-    
+
     async def download_movie_entry_point(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -152,7 +160,10 @@ class TelegramBot:
         return GET_MOVIE_LINK
 
     async def display_show_options(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, add_new_show: bool = True
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        add_new_show: bool = True,
     ) -> str:
         """
         Displays the show options to the user.
@@ -183,7 +194,10 @@ class TelegramBot:
             list: The list of show options.
         """
         shows = self.list_shows()
-        return [shows[i : i + MAX_SHOWS_PER_RAW] for i in range(0, len(shows), MAX_SHOWS_PER_RAW)]
+        return [
+            shows[i : i + MAX_SHOWS_PER_RAW]
+            for i in range(0, len(shows), MAX_SHOWS_PER_RAW)
+        ]
 
     def list_shows(self) -> List:
         """
@@ -198,7 +212,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Failed to list shows: {str(e)}")
             return ["Error listing shows"]
-        
+
     async def receive_movie_link(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -206,12 +220,12 @@ class TelegramBot:
         parsed = self.parse_telegram_url(url)
         if not parsed:
             raise Exception("Invalid URL")
-        
+
         self.user_data = UserData(parsed=parsed)
-        
+
         await update.message.reply_text("Please send the movie name")
         return CHOOSE_MOVIE
-    
+
     async def receive_movie_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -238,11 +252,15 @@ class TelegramBot:
             )
             return ASK_FOR_INPUT
         self.user_data.show_name = show_name
-        
-        await update.message.reply_text(text=f"Selected option: {show_name} - Please send the season_episode number (e.g. 01_01)")
+
+        await update.message.reply_text(
+            text=f"Selected option: {show_name} - Please send the season_episode number (e.g. 01_01)"
+        )
         return ASK_FOR_EPISODE
-    
-    async def receive_episode_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+    async def receive_episode_number(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
         season_episode = update.message.text
         season, episode = season_episode.split("_")
         return await self.process_media(update, context, season, episode)
@@ -259,7 +277,9 @@ class TelegramBot:
         """
         show_name = update.message.text
         self.user_data.show_name = show_name
-        await update.message.reply_text(f"New show name received: {show_name} - Please send the season_episode number (e.g. 01_01)")
+        await update.message.reply_text(
+            f"New show name received: {show_name} - Please send the season_episode number (e.g. 01_01)"
+        )
         return ASK_FOR_EPISODE
 
     async def handle_channel_message(
@@ -282,7 +302,9 @@ class TelegramBot:
             reply_keyboard = self.return_shows_options()
             await update.message.reply_text(
                 "Please select a show:",
-                reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
+                reply_markup=ReplyKeyboardMarkup(
+                    reply_keyboard, one_time_keyboard=True
+                ),
             )
             return CHOOSE_SHOW
 
@@ -304,7 +326,11 @@ class TelegramBot:
         return episode_path
 
     async def process_media(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, season_number: str = None, episode_number: str = None
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        season_number: str = None,
+        episode_number: str = None,
     ) -> None:
         """
         Processes the media based on the user's input.
@@ -314,13 +340,16 @@ class TelegramBot:
             context (ContextTypes.DEFAULT_TYPE): The context object.
         """
         await update.message.reply_text("Processing media...")
-        if self.user_data.torrent_data and self.user_data.torrent_data.torrent_link is not None:
+        if (
+            self.user_data.torrent_data
+            and self.user_data.torrent_data.torrent_link is not None
+        ):
             await update.message.reply_text("Downloading torrent...")
             episode_path = await self.create_episode_path()
             download_torrent(self.user_data.torrent_data.torrent_link, episode_path)
             await update.message.reply_text("Torrent downloaded successfully!")
             return ConversationHandler.END
-        
+
         parsed: ParsedURL = self.user_data.parsed
         try:
             await self.start_pyro_client()
@@ -335,7 +364,9 @@ class TelegramBot:
             if message.video:
                 extension = message.video.file_name.split(".")[-1]
                 if self.user_data.movie_data and self.user_data.movie_data.movie_name:
-                    new_movie_path = f"{self.user_data.movie_data.movie_name}.{extension}"
+                    new_movie_path = (
+                        f"{self.user_data.movie_data.movie_name}.{extension}"
+                    )
                     file_path = os.path.join(self.movies_path, new_movie_path)
                 else:
                     new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
@@ -453,7 +484,10 @@ class TelegramBot:
         """
         show_path = os.path.join(self.shows_path, show_name)
         episodes = os.listdir(show_path)
-        return [episodes[i : i + MAX_SHOWS_PER_RAW] for i in range(0, len(episodes), MAX_SHOWS_PER_RAW)]
+        return [
+            episodes[i : i + MAX_SHOWS_PER_RAW]
+            for i in range(0, len(episodes), MAX_SHOWS_PER_RAW)
+        ]
 
     async def receive_episode_to_update(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -538,9 +572,7 @@ class TelegramBot:
         conv_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_url),
-                MessageHandler(
-                    filters.FORWARDED, self.handle_channel_message
-                ),
+                MessageHandler(filters.FORWARDED, self.handle_channel_message),
                 CallbackQueryHandler(self.display_show_options),
             ],
             states={
@@ -558,7 +590,7 @@ class TelegramBot:
                     MessageHandler(
                         filters.TEXT & ~filters.COMMAND, self.receive_episode_number
                     )
-                ]
+                ],
             },
             fallbacks=[cancel_handler],
         )
