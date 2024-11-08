@@ -22,12 +22,17 @@ class ParsedURL(BaseModel):
 class TorrentData(BaseModel):
     torrent_link: str | None = None
 
+class MovieData(BaseModel):
+    movie_name: str | None = None
+    movie_link: str | None = None
+
 
 class UserData(BaseModel):
     parsed: ParsedURL | None = None
     show_name: str | None = None
     episode_name: str | None = None
     torrent_data: TorrentData | None = None
+    movie_data: MovieData | None = None
 
 
 def download_torrent(torrent_link: str, save_path: str):

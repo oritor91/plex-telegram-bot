@@ -19,13 +19,13 @@ from telegram.ext import (
     filters,
     CallbackQueryHandler,
 )
-from telegram_media_bot.utils import ParsedURL, TorrentData, UserData, download_torrent
+from telegram_media_bot.utils import MovieData, ParsedURL, TorrentData, UserData, download_torrent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("telegram_media_bot")
 
 GOT_SHOW, GOT_EPISODE, GOT_EPISODE_NAME = map(chr, range(3))
-CHOOSE_SHOW, ASK_FOR_INPUT = map(chr, range(4, 6))
+CHOOSE_SHOW, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 7))
 WAIT_FOR_TORRENT, GOT_TORRENT = map(chr, range(6, 8))
 
 MAX_SHOWS_PER_RAW = 3
@@ -75,10 +75,11 @@ class TelegramBot:
         self.application: Application = (
             Application.builder().token(self.telegram_api_token).build()
         )
+        # self.application.concurrent_updates = False
         self.pyro_client: Client = Client(
             "nodim", api_id=self.api_id, api_hash=self.api_hash
         )
-        self.user_data: UserData = UserData(torrent_data=TorrentData())
+        self.user_data: UserData = UserData(torrent_data=TorrentData(), movie_data=MovieData())
 
     async def start_pyro_client(self):
         """
@@ -207,10 +208,15 @@ class TelegramBot:
                 text="Please send the name of the new show."
             )
             return ASK_FOR_INPUT
-
         self.user_data.show_name = show_name
-        await update.message.reply_text(text=f"Selected option: {show_name}")
-        return await self.process_media(update, context)
+        
+        await update.message.reply_text(text=f"Selected option: {show_name} - Please send the season_episode number (e.g. 01_01)")
+        return ASK_FOR_EPISODE
+    
+    async def receive_episode_number(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        season_episode = update.message.text
+        season, episode = season_episode.split("_")
+        return await self.process_media(update, context, season, episode)
 
     async def receive_new_show_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -224,8 +230,8 @@ class TelegramBot:
         """
         show_name = update.message.text
         self.user_data.show_name = show_name
-        await update.message.reply_text(f"New show name received: {show_name}")
-        return await self.process_media(update, context)
+        await update.message.reply_text(f"New show name received: {show_name} - Please send the season_episode number (e.g. 01_01)")
+        return ASK_FOR_EPISODE
 
     async def handle_channel_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -256,7 +262,7 @@ class TelegramBot:
         Creates the path for storing an episode.
 
         Args:
-            file_name (str, optional): The name of the episode file. Defaults to None.
+            file_name (str, optional): The name of the episode file. Defaus to None.
 
         Returns:
             str: The path for storing the episode.
@@ -269,7 +275,7 @@ class TelegramBot:
         return episode_path
 
     async def process_media(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, season_number: str = None, episode_number: str = None
     ) -> None:
         """
         Processes the media based on the user's input.
@@ -285,6 +291,7 @@ class TelegramBot:
             download_torrent(self.user_data.torrent_data.torrent_link, episode_path)
             await update.message.reply_text("Torrent downloaded successfully!")
             return ConversationHandler.END
+        
         parsed: ParsedURL = self.user_data.parsed
         try:
             await self.start_pyro_client()
@@ -297,7 +304,9 @@ class TelegramBot:
             message = await self.pyro_client.get_messages(chat_id, message_id)
 
             if message.video:
-                file_path = await self.create_episode_path(message.video.file_name)
+                extension = message.video.file_name.split(".")[-1]
+                new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
+                file_path = await self.create_episode_path(new_episode_path)
                 await self.pyro_client.download_media(message, file_name=file_path)
                 file_size = os.path.getsize(file_path) / 1024 / 1024
                 await update.message.reply_text(
@@ -513,6 +522,11 @@ class TelegramBot:
                         filters.TEXT & ~filters.COMMAND, self.receive_new_show_name
                     ),
                 ],
+                ASK_FOR_EPISODE: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, self.receive_episode_number
+                    )
+                ]
             },
             fallbacks=[cancel_handler],
         )
