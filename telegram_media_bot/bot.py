@@ -27,6 +27,7 @@ logger = logging.getLogger("telegram_media_bot")
 GOT_SHOW, GOT_EPISODE, GOT_EPISODE_NAME = map(chr, range(3))
 CHOOSE_SHOW, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 7))
 WAIT_FOR_TORRENT, GOT_TORRENT = map(chr, range(6, 8))
+GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(9, 11))
 
 MAX_SHOWS_PER_RAW = 3
 
@@ -143,6 +144,12 @@ class TelegramBot:
 
         await self.display_show_options(update, context, add_new_show=True)
         return CHOOSE_SHOW
+    
+    async def download_movie_entry_point(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        await update.message.reply_text("Please attach the movie link")
+        return GET_MOVIE_LINK
 
     async def display_show_options(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, add_new_show: bool = True
@@ -191,6 +198,28 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Failed to list shows: {str(e)}")
             return ["Error listing shows"]
+        
+    async def receive_movie_link(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        url = update.message.text
+        parsed = self.parse_telegram_url(url)
+        if not parsed:
+            raise Exception("Invalid URL")
+        
+        self.user_data = UserData(parsed=parsed)
+        
+        await update.message.reply_text("Please send the movie name")
+        return CHOOSE_MOVIE
+    
+    async def receive_movie_name(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        movie_name = update.message.text
+        movie_data = MovieData(movie_name=movie_name)
+        self.user_data.movie_data = movie_data
+        await self.process_media(update, context)
+        return
 
     async def receive_show_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -305,8 +334,12 @@ class TelegramBot:
 
             if message.video:
                 extension = message.video.file_name.split(".")[-1]
-                new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
-                file_path = await self.create_episode_path(new_episode_path)
+                if self.user_data.movie_data and self.user_data.movie_data.movie_name:
+                    new_movie_path = f"{self.user_data.movie_data.movie_name}.{extension}"
+                    file_path = os.path.join(self.movies_path, new_movie_path)
+                else:
+                    new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
+                    file_path = await self.create_episode_path(new_episode_path)
                 await self.pyro_client.download_media(message, file_name=file_path)
                 file_size = os.path.getsize(file_path) / 1024 / 1024
                 await update.message.reply_text(
@@ -502,7 +535,6 @@ class TelegramBot:
             fallbacks=[cancel_handler],
         )
         list_show_handler = CommandHandler("list_shows", self.list_show_command)
-
         conv_handler = ConversationHandler(
             entry_points=[
                 MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_url),
@@ -538,6 +570,25 @@ class TelegramBot:
             },
             fallbacks=[cancel_handler],
         )
+        movies_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler("download_movie", self.download_movie_entry_point)
+            ],
+            states={
+                GET_MOVIE_LINK: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, self.receive_movie_link
+                    )
+                ],
+                CHOOSE_MOVIE: {
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, self.receive_movie_name
+                    )
+                },
+            },
+            fallbacks=[cancel_handler],
+        )
+        self.application.add_handler(movies_handler)
         self.application.add_handler(torrent_download_handler)
         self.application.add_handler(edit_show_conv_handler)
         self.application.add_handler(list_show_handler)
