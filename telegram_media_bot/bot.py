@@ -30,7 +30,9 @@ logger = logging.getLogger("telegram_media_bot")
 
 GOT_SHOW, GOT_EPISODE, GOT_EPISODE_NAME = map(chr, range(3))
 CHOOSE_SHOW, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 7))
-WAIT_FOR_TORRENT, GOT_MOVIE_OR_SHOW, GOT_TORRENT_SHOW, GOT_TORRENT_MOVIE = map(chr, range(6, 10))
+WAIT_FOR_TORRENT, GOT_MOVIE_OR_SHOW, GOT_TORRENT_SHOW, GOT_TORRENT_MOVIE = map(
+    chr, range(6, 10)
+)
 GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(11, 13))
 
 MAX_SHOWS_PER_RAW = 3
@@ -140,7 +142,9 @@ class TelegramBot:
             context (ContextTypes.DEFAULT_TYPE): The context object.
         """
         urls = update.message.text.split("\n")
-        await update.message.reply_text("Found {} Episodes to download".format(len(urls)))
+        await update.message.reply_text(
+            "Found {} Episodes to download".format(len(urls))
+        )
         parsed_urls = []
         for url in urls:
             parsed = self.parse_telegram_url(url)
@@ -293,7 +297,9 @@ class TelegramBot:
             str: The path for storing the episode.
         """
         if self.user_data and self.user_data.movie_data:
-            movie_path = os.path.join(self.movies_path, self.user_data.movie_data.movie_name)
+            movie_path = os.path.join(
+                self.movies_path, self.user_data.movie_data.movie_name
+            )
             os.makedirs(movie_path, exist_ok=True)
             return movie_path
         show_path = os.path.join(self.shows_path, self.user_data.show_name)
@@ -302,7 +308,7 @@ class TelegramBot:
             return show_path
         episode_path = os.path.join(show_path, file_name)
         return episode_path
-    
+
     async def notify_client(self, message: str) -> None:
         """
         Notifies the client about the new media.
@@ -311,7 +317,9 @@ class TelegramBot:
             message (str): The message to send to the client.
         """
         try:
-            await self.application.bot.send_message(chat_id="@plexmedia11", text=message)
+            await self.application.bot.send_message(
+                chat_id="@plexmedia11", text=message
+            )
         except Exception as e:
             logger.warning(f"Failed to notify client: {str(e)}")
 
@@ -337,8 +345,16 @@ class TelegramBot:
             await update.message.reply_text("Downloading torrent...")
             episode_path = await self.create_episode_path()
             download_torrent(self.user_data.torrent_data.torrent_link, episode_path)
-            message = "New Movie Available" if self.user_data.movie_data else "New Episode Available"
-            message += f" {self.user_data.show_name}" if not self.user_data.movie_data else f" {self.user_data.movie_data.movie_name}"
+            message = (
+                "New Movie Available"
+                if self.user_data.movie_data
+                else "New Episode Available"
+            )
+            message += (
+                f" {self.user_data.show_name}"
+                if not self.user_data.movie_data
+                else f" {self.user_data.movie_data.movie_name}"
+            )
             await update.message.reply_text("Torrent downloaded successfully!")
             await self.notify_client(message)
             return ConversationHandler.END
@@ -352,19 +368,30 @@ class TelegramBot:
         try:
             for parsed_url in parsed:
                 parsed_url: ParsedURL
-                chat_id = parsed_url.username if parsed_url.username else f"{parsed_url.chat_id}"
+                chat_id = (
+                    parsed_url.username
+                    if parsed_url.username
+                    else f"{parsed_url.chat_id}"
+                )
                 message_id = parsed_url.message_id
                 message = await self.pyro_client.get_messages(chat_id, message_id)
 
                 if message.video:
                     extension = message.video.file_name.split(".")[-1]
                     notify_message = ""
-                    if self.user_data.movie_data and self.user_data.movie_data.movie_name:
+                    if (
+                        self.user_data.movie_data
+                        and self.user_data.movie_data.movie_name
+                    ):
                         notify_message = f"New movie available: {self.user_data.movie_data.movie_name}"
                         new_movie_path = (
                             f"{self.user_data.movie_data.movie_name}.{extension}"
                         )
-                        file_path = os.path.join(self.movies_path, self.user_data.movie_data.movie_name, new_movie_path)
+                        file_path = os.path.join(
+                            self.movies_path,
+                            self.user_data.movie_data.movie_name,
+                            new_movie_path,
+                        )
                     else:
                         notify_message = f"New episode available: {self.user_data.show_name} - S{season_number}E{episode_number}"
                         new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
@@ -379,8 +406,12 @@ class TelegramBot:
                         )
                     )
                     try:
-                        photo = await self.pyro_client.download_media(message.video.thumbs[0].file_id)
-                        await update.message.reply_photo(photo=photo, caption=notify_message)
+                        photo = await self.pyro_client.download_media(
+                            message.video.thumbs[0].file_id
+                        )
+                        await update.message.reply_photo(
+                            photo=photo, caption=notify_message
+                        )
                     except Exception as e:
                         logger.error(f"Failed to download photo: {str(e)}")
                     # await self.application.bot.send_photo(chat_id="", photo=photo, caption=notify_message)
@@ -533,12 +564,15 @@ class TelegramBot:
                 "Cancel",
             ]
         ]
-        await update.message.reply_text("Choose Type", reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True))
+        await update.message.reply_text(
+            "Choose Type",
+            reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True),
+        )
         # await update.callback_query.answer()
         # await update.callback_query.edit_message_text(text="Choose Type", reply_markup=keyboard)
 
         return GOT_MOVIE_OR_SHOW
-    
+
     async def test(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         response = update.message.text
         if response == "Movie":
@@ -546,7 +580,6 @@ class TelegramBot:
         elif response == "Show":
             return CHOOSE_SHOW
         return ConversationHandler.END
-        
 
     async def receive_new_episode_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -562,8 +595,10 @@ class TelegramBot:
             f"Episode {episode_name} renamed to {new_episode_name}"
         )
         return ConversationHandler.END
-    
-    async def download_movie_torrent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    async def download_movie_torrent(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
         if self.user_data.torrent_data:
             await update.callback_query.message.reply_text("Choose movie name: ")
             return CHOOSE_MOVIE
@@ -633,7 +668,7 @@ class TelegramBot:
                     MessageHandler(
                         filters.TEXT & ~filters.COMMAND, self.receive_movie_name
                     ),
-                    CallbackQueryHandler(self.download_movie_torrent)
+                    CallbackQueryHandler(self.download_movie_torrent),
                 },
             },
             fallbacks=[cancel_handler],
