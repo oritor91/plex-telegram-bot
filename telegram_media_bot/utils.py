@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 import libtorrent as lt
+from typing import List
 import time
 
 
@@ -29,7 +30,7 @@ class MovieData(BaseModel):
 
 
 class UserData(BaseModel):
-    parsed: ParsedURL | None = None
+    parsed: List[ParsedURL] | None = None
     show_name: str | None = None
     episode_name: str | None = None
     torrent_data: TorrentData | None = None
