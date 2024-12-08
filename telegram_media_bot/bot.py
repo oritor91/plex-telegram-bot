@@ -470,6 +470,7 @@ class TelegramBot:
             await update.message.reply_text(message)
         elif update and update.callback_query:
             await update.callback_query.message.reply_text(message)
+        return ConversationHandler.END
 
     async def edit_show_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
