@@ -32,6 +32,7 @@ GOT_SHOW, GOT_EPISODE, GOT_EPISODE_NAME = map(chr, range(3))
 CHOOSE_SHOW, GET_SHOW_LINK, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 8))
 WAIT_FOR_TORRENT, GOT_TORRENT_LINK = map(chr, range(9, 11))
 GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(12, 14))
+GET_MESSAGE = map(chr, range(15, 16))
 
 MAX_SHOWS_PER_RAW = 3
 
@@ -339,7 +340,7 @@ class TelegramBot:
         episode_path = os.path.join(show_path, file_name)
         return episode_path
 
-    async def notify_client(self, message: str) -> None:
+    async def notify_client(self, message: str, message_id = None) -> None:
         """
         Notifies the client about the new media.
 
@@ -347,11 +348,25 @@ class TelegramBot:
             message (str): The message to send to the client.
         """
         try:
-            await self.application.bot.send_message(
-                chat_id="@plexmedia11", text=message
+            if message_id is None:
+                sent_message = await self.application.bot.send_message(
+                    chat_id="@plexmedia11", text=message
+                )
+                return sent_message.message_id
+            await self.application.bot.edit_message_text(
+                chat_id="@plexmedia11", text=message, message_id=message_id
             )
+            return None
         except Exception as e:
             logger.warning(f"Failed to notify client: {str(e)}")
+
+    def get_updated_message(self, number_of_new_contents):
+        if (
+            self.user_data.movie_data
+            and self.user_data.movie_data.movie_name
+        ):
+            return f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} downloaded"
+        return f"{self.user_data.show_name.capitalize()} new content... [{number_of_new_contents} episodes downloaded]"
 
     async def process_media(
         self,
@@ -383,7 +398,7 @@ class TelegramBot:
             await self.start_pyro_client()
         except Exception as e:
             logger.error(f"Failed to start Pyrogram client: {str(e)}")
-        notify_messages = []
+        number_of_contents = 0
         try:
             for parsed_url in parsed:
                 parsed_url: ParsedURL
@@ -402,7 +417,8 @@ class TelegramBot:
                         self.user_data.movie_data
                         and self.user_data.movie_data.movie_name
                     ):
-                        notify_message = f"New movie available: {self.user_data.movie_data.movie_name}"
+                        notify_message = f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} coming soon"
+                        message_id = await self.notify_client(notify_message)
                         new_movie_path = (
                             f"{self.user_data.movie_data.movie_name}.{extension}"
                         )
@@ -412,32 +428,17 @@ class TelegramBot:
                             new_movie_path,
                         )
                     else:
-                        notify_message = f"New episode available: {self.user_data.show_name} - S{season_number}E{episode_number}"
+                        notify_message = f"{self.user_data.show_name.capitalize()} season {season_number} new content coming..."
+                        message_id = await self.notify_client(notify_message)
                         new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
                         file_path = await self.create_episode_path(new_episode_path)
                         incremented_episode = int(episode_number) + 1
                         episode_number = f"{incremented_episode:02}"
                     await self.pyro_client.download_media(message, file_name=file_path)
-                    file_size = os.path.getsize(file_path) / 1024 / 1024
-                    await update.message.reply_text(
-                        "Media downloaded successfully! File size: {:.2f} MB".format(
-                            file_size
-                        )
-                    )
-                    try:
-                        photo = await self.pyro_client.download_media(
-                            message.video.thumbs[0].file_id
-                        )
-                        await update.message.reply_photo(
-                            photo=photo, caption=notify_message
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to download photo: {str(e)}")
-                    # await self.application.bot.send_photo(chat_id="", photo=photo, caption=notify_message)
-                    notify_messages.append(notify_message)
+                    number_of_contents += 1
+                    await self.notify_client(self.get_updated_message(number_of_contents), message_id=message_id)
                 else:
                     await update.message.reply_text("Failed to find the video message.")
-            await self.notify_client("\n".join(notify_messages))
         except Exception as e:
             logger.error(f"Failed to download media: {str(e)}")
             await update.message.reply_text(f"Failed to download media: {str(e)}")
@@ -628,6 +629,15 @@ class TelegramBot:
         else:
             return ConversationHandler.END
 
+    async def notify_clients(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("Please send the message to notify clients")
+        return GET_MESSAGE
+
+    async def receive_message_to_notify(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = update.message.text
+        await self.notify_client(message)
+        return ConversationHandler.END
+
     def run(self) -> None:
         cancel_handler = CommandHandler("cancel", self.cancel)
         edit_show_conv_handler = ConversationHandler(
@@ -707,12 +717,20 @@ class TelegramBot:
             },
             fallbacks=[cancel_handler],
         )
+        notify_clients_handler = ConversationHandler(
+            entry_points=[CommandHandler("notify_client", self.notify_clients)],
+            states={
+                GET_MESSAGE: [MessageHandler(filters.TEXT, self.receive_message_to_notify)],
+            },
+            fallbacks=[cancel_handler],
+        )
         self.application.add_handler(movies_handler)
         self.application.add_handler(conv_handler)
         self.application.add_handler(torrent_download_handler)
         self.application.add_handler(edit_show_conv_handler)
         self.application.add_handler(list_show_handler)
         self.application.add_handler(list_movie_handler)
+        self.application.add_handler(notify_clients_handler)
         self.application.add_error_handler(self.error_handler)
 
         logger.info("Starting the bot...")
