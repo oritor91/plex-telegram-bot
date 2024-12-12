@@ -366,7 +366,7 @@ class TelegramBot:
             and self.user_data.movie_data.movie_name
         ):
             return f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} downloaded"
-        return f"{self.user_data.show_name.capitalize()} new content... [{number_of_new_contents} episodes downloaded]"
+        return f"{self.user_data.show_name.capitalize()} [{number_of_new_contents} episodes downloaded]"
 
     async def process_media(
         self,
