@@ -400,6 +400,8 @@ class TelegramBot:
             logger.error(f"Failed to start Pyrogram client: {str(e)}")
         number_of_contents = 0
         try:
+            notify_message = f"New content coming your way"
+            notify_message_id = await self.notify_client(notify_message)
             for parsed_url in parsed:
                 parsed_url: ParsedURL
                 chat_id = (
@@ -417,8 +419,6 @@ class TelegramBot:
                         self.user_data.movie_data
                         and self.user_data.movie_data.movie_name
                     ):
-                        notify_message = f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} coming soon"
-                        message_id = await self.notify_client(notify_message)
                         new_movie_path = (
                             f"{self.user_data.movie_data.movie_name}.{extension}"
                         )
@@ -428,15 +428,13 @@ class TelegramBot:
                             new_movie_path,
                         )
                     else:
-                        notify_message = f"{self.user_data.show_name.capitalize()} season {season_number} new content coming..."
-                        message_id = await self.notify_client(notify_message)
                         new_episode_path = f"{self.user_data.show_name}_s{season_number}e{episode_number}.{extension}"
                         file_path = await self.create_episode_path(new_episode_path)
                         incremented_episode = int(episode_number) + 1
                         episode_number = f"{incremented_episode:02}"
                     await self.pyro_client.download_media(message, file_name=file_path)
                     number_of_contents += 1
-                    await self.notify_client(self.get_updated_message(number_of_contents), message_id=message_id)
+                    await self.notify_client(self.get_updated_message(number_of_contents), message_id=notify_message_id)
                 else:
                     await update.message.reply_text("Failed to find the video message.")
         except Exception as e:
