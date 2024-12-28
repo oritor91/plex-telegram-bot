@@ -33,6 +33,7 @@ CHOOSE_SHOW, GET_SHOW_LINK, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 8
 WAIT_FOR_TORRENT, GOT_TORRENT_LINK = map(chr, range(9, 11))
 GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(12, 14))
 GET_MESSAGE = map(chr, range(15, 16))
+GET_POLL_MESSAGE = map(chr, range(17, 18))
 
 MAX_SHOWS_PER_RAW = 3
 
@@ -636,6 +637,24 @@ class TelegramBot:
         await self.notify_client(message)
         return ConversationHandler.END
 
+    async def create_poll_entry(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("Please send the message for the poll")
+        return GET_POLL_MESSAGE
+    
+    async def create_poll(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        message = update.message.text
+        options = ["לא", "כן"]
+
+        # Send the poll
+        await context.bot.send_poll(
+            chat_id="@plexmedia11",
+            question=message,
+            options=options,
+            is_anonymous=True,  # Set to False if you want to see who voted
+            allows_multiple_answers=False,  # Change to True for multiple-choice polls
+        )
+        return ConversationHandler.END
+
     def run(self) -> None:
         cancel_handler = CommandHandler("cancel", self.cancel)
         edit_show_conv_handler = ConversationHandler(
@@ -661,6 +680,13 @@ class TelegramBot:
         )
         list_show_handler = CommandHandler("list_shows", self.list_show_command)
         list_movie_handler = CommandHandler("list_movies", self.list_movie_command)
+        create_poll_handler = ConversationHandler(
+            entry_points=[CommandHandler("create_poll", self.create_poll_entry)],
+            states={
+                GET_POLL_MESSAGE: [MessageHandler(filters.TEXT& ~filters.COMMAND, self.create_poll)]
+            },
+            fallbacks=[cancel_handler],
+        )
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler("download_show", self.download_show_entry_point),
@@ -728,6 +754,7 @@ class TelegramBot:
         self.application.add_handler(edit_show_conv_handler)
         self.application.add_handler(list_show_handler)
         self.application.add_handler(list_movie_handler)
+        self.application.add_handler(create_poll_handler)
         self.application.add_handler(notify_clients_handler)
         self.application.add_error_handler(self.error_handler)
 
