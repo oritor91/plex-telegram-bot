@@ -412,9 +412,8 @@ class TelegramBot:
                 )
                 message_id = parsed_url.message_id
                 message = await self.pyro_client.get_messages(chat_id, message_id)
-
-                if message.video:
-                    extension = message.video.file_name.split(".")[-1]
+                if message.video or message.document:
+                    extension = message.video.file_name.split(".")[-1] if message.video else message.document.file_name.split(".")[-1]
                     notify_message = ""
                     if (
                         self.user_data.movie_data
@@ -433,7 +432,8 @@ class TelegramBot:
                         file_path = await self.create_episode_path(new_episode_path)
                         incremented_episode = int(episode_number) + 1
                         episode_number = f"{incremented_episode:02}"
-                    await self.pyro_client.download_media(message, file_name=file_path)
+                    download_media = message if message.video else message.document.file_id
+                    await self.pyro_client.download_media(download_media, file_name=file_path)
                     number_of_contents += 1
                     await self.notify_client(self.get_updated_message(number_of_contents), message_id=notify_message_id)
                 else:
