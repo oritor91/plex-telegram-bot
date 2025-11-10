@@ -106,7 +106,6 @@ class TelegramBot:
         """
         return os.path.join(self.media_base_path, "movies")
 
-    @property
     def parse_telegram_url(self, url):
         """
         Parses a Telegram URL and returns the parsed data.
@@ -391,7 +390,6 @@ class TelegramBot:
                 if message.video or message.document:
                     file_name = message.video.file_name if message.video else message.document.file_name
                     extension = file_name.rsplit(".", 1)[-1] if file_name else "mp4"
-                    extension = message.video.file_name.rsplit(".", 1)[-1] if message.video else message.document.file_name.split(".")[-1]
                     notify_message = ""
                     if (
                         self.user_data.movie_data
