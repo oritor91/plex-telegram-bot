@@ -8,7 +8,6 @@ This Telegram bot allows authorized users to manage media content, including dow
 
 - **Media Management**: Manage your media content by downloading videos and editing existing shows.
 - **Telegram Integration**: Download videos directly from Telegram.
-- **Torrent Integration**: Download videos using torrent magnet links.
 - **User Authorization**: Restrict bot usage to authorized users only.
 - **Conversation Handler**: A structured conversation flow to collect necessary information from the user.
 
