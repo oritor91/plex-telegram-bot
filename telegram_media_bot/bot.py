@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import traceback
 from typing import List, Optional
 from pyrogram import Client
 from telegram import (
@@ -20,9 +21,7 @@ from telegram.ext import (
 from telegram_media_bot.utils import (
     MovieData,
     ParsedURL,
-    TorrentData,
     UserData,
-    download_torrent,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -30,10 +29,9 @@ logger = logging.getLogger("telegram_media_bot")
 
 GOT_SHOW, GOT_EPISODE, GOT_EPISODE_NAME = map(chr, range(3))
 CHOOSE_SHOW, GET_SHOW_LINK, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 8))
-WAIT_FOR_TORRENT, GOT_TORRENT_LINK = map(chr, range(9, 11))
-GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(12, 14))
-GET_MESSAGE = map(chr, range(15, 16))
-GET_POLL_MESSAGE = map(chr, range(17, 18))
+GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(8, 10))
+GET_MESSAGE = map(chr, range(10, 11))
+GET_POLL_MESSAGE = map(chr, range(11, 12))
 
 MAX_SHOWS_PER_RAW = 3
 
@@ -85,7 +83,7 @@ class TelegramBot:
             "nodim", api_id=self.api_id, api_hash=self.api_hash
         )
         self.user_data: UserData = UserData(
-            torrent_data=TorrentData(), movie_data=MovieData()
+            movie_data=MovieData()
         )
 
     async def start_pyro_client(self):
@@ -109,12 +107,6 @@ class TelegramBot:
         return os.path.join(self.media_base_path, "movies")
 
     @property
-    def torrent_path(self) -> str:
-        """
-        Returns the path for storing torrents.
-        """
-        return os.path.join(self.media_base_path, "torrents")
-
     def parse_telegram_url(self, url):
         """
         Parses a Telegram URL and returns the parsed data.
@@ -322,12 +314,6 @@ class TelegramBot:
         Returns:
             str: The path for storing the episode.
         """
-        if self.user_data.torrent_data and self.user_data.torrent_data.torrent_link:
-            torrent_path = os.path.join(
-                self.torrent_path, self.user_data.torrent_data.torrent_name
-            )
-            os.makedirs(torrent_path, exist_ok=True)
-            return torrent_path
         if self.user_data and self.user_data.movie_data:
             movie_path = os.path.join(
                 self.movies_path, self.user_data.movie_data.movie_name
@@ -366,8 +352,8 @@ class TelegramBot:
             self.user_data.movie_data
             and self.user_data.movie_data.movie_name
         ):
-            return f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} downloaded"
-        return f"{self.user_data.show_name.capitalize()} [{number_of_new_contents} episodes downloaded]"
+            return f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} downloaded 🎥"
+        return f"{self.user_data.show_name.capitalize()} [{number_of_new_contents} episodes downloaded] 📺"
 
     async def process_media(
         self,
@@ -384,16 +370,6 @@ class TelegramBot:
             context (ContextTypes.DEFAULT_TYPE): The context object.
         """
         await update.message.reply_text("Processing media...")
-        if (
-            self.user_data.torrent_data
-            and self.user_data.torrent_data.torrent_link is not None
-        ):
-            await update.message.reply_text("Downloading torrent...")
-            episode_path = await self.create_episode_path()
-            download_torrent(self.user_data.torrent_data.torrent_link, episode_path)
-            await update.message.reply_text("Torrent downloaded successfully!")
-            return ConversationHandler.END
-
         parsed: ParsedURL = self.user_data.parsed
         try:
             await self.start_pyro_client()
@@ -401,7 +377,7 @@ class TelegramBot:
             logger.error(f"Failed to start Pyrogram client: {str(e)}")
         number_of_contents = 0
         try:
-            notify_message = f"New content coming your way"
+            notify_message = "New content coming your way! 🎬"
             notify_message_id = await self.notify_client(notify_message)
             for parsed_url in parsed:
                 parsed_url: ParsedURL
@@ -413,7 +389,9 @@ class TelegramBot:
                 message_id = parsed_url.message_id
                 message = await self.pyro_client.get_messages(chat_id, message_id)
                 if message.video or message.document:
-                    extension = message.video.file_name.split(".")[-1] if message.video else message.document.file_name.split(".")[-1]
+                    file_name = message.video.file_name if message.video else message.document.file_name
+                    extension = file_name.rsplit(".", 1)[-1] if file_name else "mp4"
+                    extension = message.video.file_name.rsplit(".", 1)[-1] if message.video else message.document.file_name.split(".")[-1]
                     notify_message = ""
                     if (
                         self.user_data.movie_data
@@ -439,8 +417,10 @@ class TelegramBot:
                 else:
                     await update.message.reply_text("Failed to find the video message.")
         except Exception as e:
+            traceback_str = traceback.format_exc()
             logger.error(f"Failed to download media: {str(e)}")
-            await update.message.reply_text(f"Failed to download media: {str(e)}")
+            logger.error(traceback_str)
+            await update.message.reply_text(f"Failed to download media: {str(e)}\n{traceback_str}")
         finally:
             return ConversationHandler.END
 
@@ -580,30 +560,6 @@ class TelegramBot:
         )
         return GOT_EPISODE_NAME
 
-    async def torrent_entry_point(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        await update.message.reply_text("Please send the torrent magnet link")
-        return WAIT_FOR_TORRENT
-
-    async def receive_torrent(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        torrent_link = update.message.text
-        self.user_data.torrent_data.torrent_link = torrent_link
-        await update.message.reply_text(
-            "Torrent link received. reply with torrent name"
-        )
-        return GOT_TORRENT_LINK
-
-    async def got_torrent_link(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        torrent_name = update.message.text
-        self.user_data.torrent_data.torrent_name = torrent_name
-        await self.process_media(update, context)
-        return ConversationHandler.END
-
     async def receive_new_episode_name(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -733,14 +689,6 @@ class TelegramBot:
             },
             fallbacks=[cancel_handler],
         )
-        torrent_download_handler = ConversationHandler(
-            entry_points=[CommandHandler("download_torrent", self.torrent_entry_point)],
-            states={
-                WAIT_FOR_TORRENT: [MessageHandler(filters.TEXT, self.receive_torrent)],
-                GOT_TORRENT_LINK: [MessageHandler(filters.TEXT, self.got_torrent_link)],
-            },
-            fallbacks=[cancel_handler],
-        )
         notify_clients_handler = ConversationHandler(
             entry_points=[CommandHandler("notify_client", self.notify_clients)],
             states={
@@ -750,7 +698,6 @@ class TelegramBot:
         )
         self.application.add_handler(movies_handler)
         self.application.add_handler(conv_handler)
-        self.application.add_handler(torrent_download_handler)
         self.application.add_handler(edit_show_conv_handler)
         self.application.add_handler(list_show_handler)
         self.application.add_handler(list_movie_handler)
