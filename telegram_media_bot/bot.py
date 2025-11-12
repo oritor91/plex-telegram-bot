@@ -8,6 +8,7 @@ from telegram import (
     Update,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
+    BotCommand,
 )
 from telegram.ext import (
     Application,
@@ -32,8 +33,11 @@ CHOOSE_SHOW, GET_SHOW_LINK, ASK_FOR_INPUT, ASK_FOR_EPISODE = map(chr, range(4, 8
 GET_MOVIE_LINK, CHOOSE_MOVIE = map(chr, range(8, 10))
 GET_MESSAGE = map(chr, range(10, 11))
 GET_POLL_MESSAGE = map(chr, range(11, 12))
+DELETE_SHOW_MESSAGE = map(chr, range(12, 13))
+DELETE_MOVIE_MESSAGE = map(chr, range(13, 14))
 
 MAX_SHOWS_PER_RAW = 3
+MAX_MOVIES_PER_RAW = 3
 
 
 class TelegramBot:
@@ -82,9 +86,7 @@ class TelegramBot:
         self.pyro_client: Client = Client(
             "nodim", api_id=self.api_id, api_hash=self.api_hash
         )
-        self.user_data: UserData = UserData(
-            movie_data=MovieData()
-        )
+        self.user_data: UserData = UserData(movie_data=MovieData())
 
     async def start_pyro_client(self):
         """
@@ -204,6 +206,19 @@ class TelegramBot:
         return [
             shows[i : i + MAX_SHOWS_PER_RAW]
             for i in range(0, len(shows), MAX_SHOWS_PER_RAW)
+        ]
+
+    def return_movies_options(self) -> List:
+        """
+        Returns the available movie options.
+
+        Returns:
+            list: The list of movie options.
+        """
+        movies = self.list_movies()
+        return [
+            movies[i : i + MAX_MOVIES_PER_RAW]
+            for i in range(0, len(movies), MAX_MOVIES_PER_RAW)
         ]
 
     def list_movies(self) -> List:
@@ -326,7 +341,7 @@ class TelegramBot:
         episode_path = os.path.join(show_path, file_name)
         return episode_path
 
-    async def notify_client(self, message: str, message_id = None) -> None:
+    async def notify_client(self, message: str, message_id=None) -> None:
         """
         Notifies the client about the new media.
 
@@ -347,10 +362,7 @@ class TelegramBot:
             logger.warning(f"Failed to notify client: {str(e)}")
 
     def get_updated_message(self, number_of_new_contents):
-        if (
-            self.user_data.movie_data
-            and self.user_data.movie_data.movie_name
-        ):
+        if self.user_data.movie_data and self.user_data.movie_data.movie_name:
             return f"New movie alert - {self.user_data.movie_data.movie_name.capitalize()} downloaded 🎥"
         return f"{self.user_data.show_name.capitalize()} [{number_of_new_contents} episodes downloaded] 📺"
 
@@ -388,7 +400,11 @@ class TelegramBot:
                 message_id = parsed_url.message_id
                 message = await self.pyro_client.get_messages(chat_id, message_id)
                 if message.video or message.document:
-                    file_name = message.video.file_name if message.video else message.document.file_name
+                    file_name = (
+                        message.video.file_name
+                        if message.video
+                        else message.document.file_name
+                    )
                     extension = file_name.rsplit(".", 1)[-1] if file_name else "mp4"
                     notify_message = ""
                     if (
@@ -408,17 +424,26 @@ class TelegramBot:
                         file_path = await self.create_episode_path(new_episode_path)
                         incremented_episode = int(episode_number) + 1
                         episode_number = f"{incremented_episode:02}"
-                    download_media = message if message.video else message.document.file_id
-                    await self.pyro_client.download_media(download_media, file_name=file_path)
+                    download_media = (
+                        message if message.video else message.document.file_id
+                    )
+                    await self.pyro_client.download_media(
+                        download_media, file_name=file_path
+                    )
                     number_of_contents += 1
-                    await self.notify_client(self.get_updated_message(number_of_contents), message_id=notify_message_id)
+                    await self.notify_client(
+                        self.get_updated_message(number_of_contents),
+                        message_id=notify_message_id,
+                    )
                 else:
                     await update.message.reply_text("Failed to find the video message.")
         except Exception as e:
             traceback_str = traceback.format_exc()
             logger.error(f"Failed to download media: {str(e)}")
             logger.error(traceback_str)
-            await update.message.reply_text(f"Failed to download media: {str(e)}\n{traceback_str}")
+            await update.message.reply_text(
+                f"Failed to download media: {str(e)}\n{traceback_str}"
+            )
         finally:
             return ConversationHandler.END
 
@@ -586,15 +611,19 @@ class TelegramBot:
         await update.message.reply_text("Please send the message to notify clients")
         return GET_MESSAGE
 
-    async def receive_message_to_notify(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def receive_message_to_notify(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
         message = update.message.text
         await self.notify_client(message)
         return ConversationHandler.END
 
-    async def create_poll_entry(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def create_poll_entry(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
         await update.message.reply_text("Please send the message for the poll")
         return GET_POLL_MESSAGE
-    
+
     async def create_poll(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = update.message.text
         options = ["לא", "כן"]
@@ -608,6 +637,69 @@ class TelegramBot:
             allows_multiple_answers=False,  # Change to True for multiple-choice polls
         )
         return ConversationHandler.END
+
+    async def delete_show_entry_point(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        reply_keyboard = self.return_shows_options()
+        await update.message.reply_text(
+            "Please select a show to delete:",
+            reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
+        )
+        return DELETE_SHOW_MESSAGE
+
+    async def receive_show_to_delete(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        show_name = update.message.text
+        show_path = os.path.join(self.shows_path, show_name)
+        os.rmdir(show_path)
+        await update.message.reply_text(f"Show {show_name} deleted")
+        return ConversationHandler.END
+
+    async def delete_movie_entry_point(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        reply_keyboard = self.return_movies_options()
+        await update.message.reply_text(
+            "Please select a movie to delete:",
+            reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True),
+        )
+        return DELETE_MOVIE_MESSAGE
+
+    async def receive_movie_to_delete(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        movie_name = update.message.text
+        movie_path = os.path.join(self.movies_path, movie_name)
+        os.rmdir(movie_path)
+        await update.message.reply_text(f"Movie {movie_name} deleted")
+        return ConversationHandler.END
+
+    async def set_bot_commands(self):
+        """
+        Set bot commands using Telegram Bot API
+        """
+        commands = [
+            BotCommand(
+                "download_show", "Download TV show episodes from Telegram links"
+            ),
+            BotCommand("download_movie", "Download movies from Telegram links"),
+            BotCommand("edit_show", "Edit and rename TV show episodes"),
+            BotCommand("list_shows", "List all available TV shows"),
+            BotCommand("list_movies", "List all available movies"),
+            BotCommand("create_poll", "Create a poll for the media channel"),
+            BotCommand("notify_client", "Send notification messages to clients"),
+            BotCommand("delete_show", "Delete a TV show from the collection"),
+            BotCommand("delete_movie", "Delete a movie from the collection"),
+            BotCommand("cancel", "Cancel current operation"),
+        ]
+
+        try:
+            await self.application.bot.set_my_commands(commands)
+            logger.info("Bot commands set successfully")
+        except Exception as e:
+            logger.error(f"Failed to set bot commands: {str(e)}")
 
     def run(self) -> None:
         cancel_handler = CommandHandler("cancel", self.cancel)
@@ -637,7 +729,9 @@ class TelegramBot:
         create_poll_handler = ConversationHandler(
             entry_points=[CommandHandler("create_poll", self.create_poll_entry)],
             states={
-                GET_POLL_MESSAGE: [MessageHandler(filters.TEXT& ~filters.COMMAND, self.create_poll)]
+                GET_POLL_MESSAGE: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.create_poll)
+                ]
             },
             fallbacks=[cancel_handler],
         )
@@ -690,7 +784,29 @@ class TelegramBot:
         notify_clients_handler = ConversationHandler(
             entry_points=[CommandHandler("notify_client", self.notify_clients)],
             states={
-                GET_MESSAGE: [MessageHandler(filters.TEXT, self.receive_message_to_notify)],
+                GET_MESSAGE: [
+                    MessageHandler(filters.TEXT, self.receive_message_to_notify)
+                ],
+            },
+            fallbacks=[cancel_handler],
+        )
+        delete_show_handler = ConversationHandler(
+            entry_points=[CommandHandler("delete_show", self.delete_show_entry_point)],
+            states={
+                DELETE_SHOW_MESSAGE: [
+                    MessageHandler(filters.TEXT, self.receive_show_to_delete)
+                ],
+            },
+            fallbacks=[cancel_handler],
+        )
+        delete_movie_handler = ConversationHandler(
+            entry_points=[
+                CommandHandler("delete_movie", self.delete_movie_entry_point)
+            ],
+            states={
+                DELETE_MOVIE_MESSAGE: [
+                    MessageHandler(filters.TEXT, self.receive_movie_to_delete)
+                ],
             },
             fallbacks=[cancel_handler],
         )
@@ -701,9 +817,17 @@ class TelegramBot:
         self.application.add_handler(list_movie_handler)
         self.application.add_handler(create_poll_handler)
         self.application.add_handler(notify_clients_handler)
+        self.application.add_handler(delete_show_handler)
+        self.application.add_handler(delete_movie_handler)
         self.application.add_error_handler(self.error_handler)
 
         logger.info("Starting the bot...")
+
+        # Set up bot commands on startup
+        async def post_init(application):
+            await self.set_bot_commands()
+
+        self.application.post_init = post_init
         self.application.run_polling()
 
 
