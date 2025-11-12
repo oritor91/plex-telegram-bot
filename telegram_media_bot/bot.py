@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import shutil
 import traceback
 from typing import List, Optional
 from pyrogram import Client
@@ -653,7 +654,7 @@ class TelegramBot:
     ):
         show_name = update.message.text
         show_path = os.path.join(self.shows_path, show_name)
-        os.rmdir(show_path)
+        shutil.rmtree(show_path, ignore_errors=True)
         await update.message.reply_text(f"Show {show_name} deleted")
         return ConversationHandler.END
 
@@ -672,7 +673,7 @@ class TelegramBot:
     ):
         movie_name = update.message.text
         movie_path = os.path.join(self.movies_path, movie_name)
-        os.rmdir(movie_path)
+        shutil.rmtree(movie_path, ignore_errors=True)
         await update.message.reply_text(f"Movie {movie_name} deleted")
         return ConversationHandler.END
 
